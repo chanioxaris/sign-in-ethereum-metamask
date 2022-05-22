@@ -2,6 +2,7 @@ import { useState } from "react";
 
 function App() {
     const [ signedInAddress, setSignedInAddress ] = useState('')
+    const [ signedInENS, setSignedInENS ] = useState('')
 
     async function handleLogin() {
         const { ethereum } = window
@@ -18,7 +19,7 @@ function App() {
             throw new Error(response.statusText)
         }
 
-        const body = await response.json()
+        let body = await response.json()
 
         const signature = await ethereum.request({
             method: 'personal_sign',
@@ -34,11 +35,15 @@ function App() {
             throw new Error(response.statusText)
         }
 
+        body = await response.json()
+
         setSignedInAddress(address)
+        setSignedInENS(body.ens)
     }
 
     async function handleLogout() {
         setSignedInAddress('')
+        setSignedInENS('')
     }
 
     if (!isMetamaskAvailable()) {
@@ -57,6 +62,7 @@ function App() {
                 <>
                     <p>Successfully signed in with Metamask!</p>
                     <p>ETH address {signedInAddress}</p>
+                    <p>{signedInENS && `ENS domain ${signedInENS}`}</p>
                     <button onClick={handleLogout}>
                         Logout
                     </button>

@@ -14,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/wealdtech/go-ens/v3"
 )
 
 const (
@@ -32,9 +34,18 @@ func main() {
 		port = customPort
 	}
 
+	var ethereumClient *ethclient.Client
+	if infuraSecret := os.Getenv("INFURA_SECRET"); infuraSecret != "" {
+		var err error
+		ethereumClient, err = ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", infuraSecret))
+		if err != nil {
+			log.Fatalln("Failed to initialize Ethereum client", err)
+		}
+	}
+
 	http.Handle("/", indexHandler())
 	http.HandleFunc("/api/nonce", nonceHandler(store))
-	http.HandleFunc("/api/verify-signature", verifySignatureHandler(store))
+	http.HandleFunc("/api/verify-signature", verifySignatureHandler(store, ethereumClient))
 
 	fmt.Printf("Start listening at http://localhost:%s\n", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
@@ -80,7 +91,11 @@ type verifySignatureRequest struct {
 	Signature string `json:"signature"`
 }
 
-func verifySignatureHandler(store *inMemoryStore) http.HandlerFunc {
+type verifySignatureResponse struct {
+	ENS string `json:"ens"`
+}
+
+func verifySignatureHandler(store *inMemoryStore, ethereumClient *ethclient.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := verifySignatureRequest{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -100,6 +115,14 @@ func verifySignatureHandler(store *inMemoryStore) http.HandlerFunc {
 		}
 
 		store.Remove(body.Address)
+
+		var reverse string
+		if ethereumClient != nil {
+			// Not an error, if we can't resolve the address to an ENS domain.
+			reverse, _ = ens.ReverseResolve(ethereumClient, common.HexToAddress(body.Address))
+		}
+
+		_ = json.NewEncoder(w).Encode(verifySignatureResponse{ENS: reverse})
 	}
 }
 
